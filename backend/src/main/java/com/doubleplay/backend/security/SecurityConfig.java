@@ -28,7 +28,9 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/refresh").permitAll()
-                        .anyRequest().authenticated())
+                        .requestMatchers(HttpMethod.GET, "/api/teams/**", "/api/games/**", "/api/venues/**").permitAll()
+                        .anyRequest().authenticated()
+                )
                 .addFilterBefore(new JwtAuthFilter(jwtProvider, usersRepository), org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
