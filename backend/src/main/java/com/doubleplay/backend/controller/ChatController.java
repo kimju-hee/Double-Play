@@ -1,13 +1,14 @@
 package com.doubleplay.backend.controller;
 
-import com.doubleplay.backend.dto.ChatMessageCreateRequest;
-import com.doubleplay.backend.dto.ChatMessageResponse;
-import com.doubleplay.backend.dto.ChatRoomCreateRequest;
-import com.doubleplay.backend.dto.ChatRoomResponse;
+import com.doubleplay.backend.dto.*;
 import com.doubleplay.backend.service.ChatService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.handler.annotation.DestinationVariable;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -21,6 +22,19 @@ public class ChatController {
     public ChatRoomResponse createRoom(@RequestBody ChatRoomCreateRequest req) {
         return chatService.createRoom(req);
     }
+
+    @MessageMapping("/chatroom/{roomId}/send")
+    @SendTo("/topic/chatroom/{roomId}")
+    public ChatMessageResponse send(@DestinationVariable Long roomId, ChatMessageRequest req) {
+        return new ChatMessageResponse(
+                null,
+                roomId,
+                req.senderUserId(),
+                req.content(),
+                LocalDateTime.now()
+        );
+    }
+
 
     @GetMapping("/meetups/{meetupId}/chatrooms")
     public Map<String, List<ChatRoomResponse>> listRooms(@PathVariable Long meetupId) {
