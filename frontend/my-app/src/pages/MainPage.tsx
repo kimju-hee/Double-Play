@@ -6,6 +6,7 @@ export default function MainPage() {
   const [rooms, setRooms] = useState<ChatRoom[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
     let on = true
@@ -13,6 +14,9 @@ export default function MainPage() {
       try {
         const data = await fetchChatRooms()
         if (on) setRooms(data)
+      } catch (e: any) {
+        console.error('fetchChatRooms error', e)
+        if (on) setErr(e?.message || '채팅방 목록을 불러오지 못했어요.')
       } finally {
         if (on) setLoading(false)
       }
@@ -28,6 +32,7 @@ export default function MainPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* 헤더 */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
         <div className="mx-auto max-w-6xl px-4 py-4 flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -51,7 +56,14 @@ export default function MainPage() {
         </div>
       </header>
 
+      {/* 본문 */}
       <main className="mx-auto max-w-6xl px-4 py-8">
+        {err && (
+          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {err}
+          </div>
+        )}
+
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (

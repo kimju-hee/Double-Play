@@ -48,17 +48,18 @@ export const useAuth = create<AuthState>()(
 )
 
 setAuthHandlers(
-  async () => {
-    const { refreshToken } = useAuth.getState()
-    if (!refreshToken) throw new Error('no refresh token')
-    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
-    const { data } = await axios.post(
-      `${base}/api/auth/refresh`,
-      { refreshToken },
-      { headers: { 'Content-Type': 'application/json' }, withCredentials: true }
-    )
-    return data.accessToken as string
-  },
-  () => {
-  }
-)
+    async () => {
+      const { refreshToken } = useAuth.getState()
+      if (!refreshToken) throw new Error('no refresh token')
+      const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+      const { data } = await axios.post(
+        `${base}/api/auth/refresh`,
+        { refreshToken },
+        { headers: { 'Content-Type': 'application/json' }, withCredentials: true }
+      )
+      return data.accessToken as string
+    },
+    () => {
+      useAuth.getState().logout()
+    }
+  )

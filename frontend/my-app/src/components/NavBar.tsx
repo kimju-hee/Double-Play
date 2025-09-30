@@ -1,20 +1,26 @@
-import { NavLink, Link } from 'react-router-dom'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 
 function cxActive({ isActive }: { isActive: boolean }) {
   return [
-    'px-3 py-2 rounded-lg text-sm font-medium transition',
+    'px-3 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap',
     isActive ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-gray-100'
   ].join(' ')
 }
 
 export default function NavBar() {
+  const nav = useNavigate()
+
+  // ✅ 각 필드를 개별 selector로 뽑기 (객체 리터럴 금지)
   const user = useAuth(s => s.user)
   const logout = useAuth(s => s.logout)
 
-  const initials = (user?.nickname ?? '')
-    .trim()
-    .slice(0, 2) || 'DP'
+  const initials = (user?.nickname ?? '').trim().slice(0, 2) || 'DP'
+
+  const handleLogout = () => {
+    logout()
+    nav('/login', { replace: true })
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur">
@@ -24,10 +30,12 @@ export default function NavBar() {
           <span className="font-semibold">Double-Play</span>
         </Link>
 
-        <nav className="ml-6 flex items-center gap-2">
+        <nav className="ml-6 flex items-center gap-2 overflow-x-auto no-scrollbar">
           <NavLink to="/schedule" className={cxActive}>경기 일정</NavLink>
           <NavLink to="/chat" className={cxActive}>채팅</NavLink>
           <NavLink to="/tickets" className={cxActive}>티켓 거래</NavLink>
+          <NavLink to="/teams" className={cxActive}>팀</NavLink>
+          <NavLink to="/venues" className={cxActive}>구장</NavLink>
           <NavLink to="/me" className={cxActive}>마이페이지</NavLink>
         </nav>
 
@@ -38,14 +46,12 @@ export default function NavBar() {
                 {initials}
               </div>
               <span className="text-sm text-gray-800">{user.nickname}</span>
-              {logout && (
-                <button
-                  onClick={logout}
-                  className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
-                >
-                  로그아웃
-                </button>
-              )}
+              <button
+                onClick={handleLogout}
+                className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
+              >
+                로그아웃
+              </button>
             </>
           ) : (
             <>
