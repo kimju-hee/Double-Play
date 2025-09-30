@@ -1,4 +1,3 @@
 package com.doubleplay.backend.dto;
 
-public class ParticipantStatusResponse {
-}
+public record ParticipantStatusResponse(String status) {}

@@ -1,29 +1,27 @@
 package com.doubleplay.backend.controller;
 
-import com.doubleplay.backend.dto.ListResponse;
-import com.doubleplay.backend.dto.VenueDetail;
-import com.doubleplay.backend.dto.VenueSummary;
-import com.doubleplay.backend.service.VenueService;
+import com.doubleplay.backend.entity.Venue;
+import com.doubleplay.backend.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Sort;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.*;
 
 @RestController
-@RequestMapping("/api/venues")
+@RequestMapping("/api")
 @RequiredArgsConstructor
 public class VenueController {
-    private final VenueService venueService;
+    private final VenueRepository venueRepository;
 
-    @GetMapping
-    public ResponseEntity<ListResponse<VenueSummary>> list() {
-        return ResponseEntity.ok(venueService.list());
+    @GetMapping("/venues")
+    public Map<String, Object> list() {
+        List<Venue> items = venueRepository.findAll(Sort.by(Sort.Direction.ASC, "venueId"));
+        return Map.of("items", items);
     }
 
-    @GetMapping("/{venueId}")
-    public ResponseEntity<VenueDetail> get(@PathVariable Long venueId) {
-        return ResponseEntity.ok(venueService.get(venueId));
+    @GetMapping("/venues/{venueId}")
+    public Venue get(@PathVariable Long venueId) {
+        return venueRepository.findById(venueId).orElseThrow();
     }
 }

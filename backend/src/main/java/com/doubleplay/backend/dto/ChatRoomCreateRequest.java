@@ -1,3 +1,2 @@
 package com.doubleplay.backend.dto;
-
-public record ChatRoomCreateRequest(Long meetupId) {}
+public record ChatRoomCreateRequest(String title, Long transactionId) {}

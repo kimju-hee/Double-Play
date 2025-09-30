@@ -1,4 +1,4 @@
 package com.doubleplay.backend.dto;
 
-public class MemberInfo {
-}
+public record MemberInfo(Long userId, String nickname, String role, String status) {}
+

@@ -1,5 +1,11 @@
 package com.doubleplay.backend.dto;
 
-import java.time.LocalDateTime;
-
-public record TransactionResponse(Long transactionId, Long meetupId, Long userId, int price, LocalDateTime tradedAt) {}
+public record TransactionResponse(
+        Long transactionId,
+        Long meetupId,
+        Long userId,
+        String title,
+        Integer price,
+        Long venueId,
+        String tradedAt
+) {}

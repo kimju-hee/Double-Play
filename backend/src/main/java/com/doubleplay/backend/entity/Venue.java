@@ -3,18 +3,17 @@ package com.doubleplay.backend.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Entity
-@Table(name = "Venue")
 @Getter
-@Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@Entity
+@Table(name = "Venue")
 public class Venue {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "venue_id")
     private Long venueId;
 
-    @Column(length = 100)
+    @Column(name = "venue_name", nullable = false, length = 200)
     private String venueName;
 }

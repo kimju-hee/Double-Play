@@ -24,8 +24,10 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest req) {
         var u = authService.signup(req);
+        System.out.println("[SIGNUP] response userId=" + u.getUserId());
         return ResponseEntity.ok(new LoginResponse.UserPayload(u.getUserId(), u.getNickname(), u.getRole()));
     }
+
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest req, HttpServletResponse res) {

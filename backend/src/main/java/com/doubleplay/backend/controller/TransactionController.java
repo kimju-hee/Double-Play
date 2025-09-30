@@ -36,4 +36,9 @@ public class TransactionController {
                           @RequestParam(defaultValue = "false") boolean isAdmin) {
         return transactionService.delete(transactionId, requesterId, isAdmin);
     }
+
+    @GetMapping("/transactions")
+    public List<TransactionSummary> listAll(@RequestParam(required = false) Long meetupId) {
+        return transactionService.list(meetupId);
+    }
 }

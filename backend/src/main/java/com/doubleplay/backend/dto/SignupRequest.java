@@ -9,6 +9,5 @@ public record SignupRequest(
         @Email @NotBlank String email,
         @Size(min = 8, max = 64) String password,
         @NotBlank String nickname,
-        @Pattern(regexp = "M|F") String gender,
-        @NotBlank String oauth_provider
+        @Pattern(regexp = "M|F") String gender
 ) {}

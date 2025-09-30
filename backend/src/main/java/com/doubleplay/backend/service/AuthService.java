@@ -9,6 +9,7 @@ import com.doubleplay.backend.repository.RefreshTokenRepository;
 import com.doubleplay.backend.repository.UsersRepository;
 import com.doubleplay.backend.security.JwtProvider;
 import com.doubleplay.backend.util.CookieUtil;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,19 +24,25 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final JwtProvider jwtProvider;
 
+    @Transactional
     public Users signup(SignupRequest req) {
         if (usersRepository.existsByEmail(req.email())) throw new IllegalStateException("duplicate");
+
+        String provider = "LOCAL";
+
         Users u = Users.builder()
                 .email(req.email())
                 .password(encoder.encode(req.password()))
                 .nickname(req.nickname())
                 .gender(req.gender())
-                .oauthProvider(req.oauth_provider())
+                .oauthProvider(provider)
                 .role("USER")
                 .build();
+
         return usersRepository.save(u);
     }
 
+    @Transactional
     public LoginResponse login(LoginRequest req) {
         Users u = usersRepository.findByEmail(req.email()).orElseThrow(() -> new IllegalArgumentException("invalid"));
         if (!encoder.matches(req.password(), u.getPassword())) throw new IllegalArgumentException("invalid");
