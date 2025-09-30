@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "chat_room") // 테이블명이 chat_room 이면 명시
+@Table(name = "chat_room")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ChatRoom {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
