@@ -55,6 +55,7 @@ export default function App() {
           <Route path="/chatrooms/new" element={<RequireAuth><ChatRoomCreatePage /></RequireAuth>} />
           <Route path="/chatrooms/:roomId" element={<RequireAuth><ChatRoomPage /></RequireAuth>} />
           <Route path="/chatrooms/:roomId/manage" element={<RequireAuth><ChatRoomManagePage /></RequireAuth>} />
+          <Route path="/chatrooms/:roomId" element={<ChatRoomPage />} />
 
           <Route
             path="/tickets"

@@ -1,306 +1,232 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Client } from '@stomp/stompjs'
-import SockJS from 'sockjs-client'
-import api from '../api/client'
 import { useAuth } from '../store/auth'
-import { computeIsOwner } from '../api/chat'
-
+import { useChatMessagesStore } from '../store/chatMessages'
 import {
+  getRoom,
+  fetchChatMessages,
+  sendChatMessage,
+  completeChat,
   listMembers,
   requestJoin,
-  approveMember,
-  rejectMember,
-  getRoom,
   type MemberInfo,
-  type ChatRoom,
+  type ChatRoom as ChatRoomMeta,
 } from '../api/chat'
 
-type ChatMsg = {
-  messageId: number
-  roomId: number
-  senderUserId: number
-  senderNickname: string
-  content: string
-  sendAt: string
-}
+type MyMembership = 'APPROVED' | 'PENDING' | 'BANNED' | 'NONE'
 
 export default function ChatRoomPage() {
   const { roomId = '' } = useParams()
   const rid = Number(roomId)
+  const me = useAuth(s => s.user)
 
-  const { user } = useAuth.getState()
-  const myId = user?.userId ?? 0
+  const { rooms, setMeta, addMessages } = useChatMessagesStore()
+  const roomState = rooms[rid]
 
-  // ▼ members를 먼저 선언
-  const [members, setMembers] = useState<MemberInfo[]>([])
-  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [members, setMembers] = useState<MemberInfo[] | null>(null)
+  const [membership, setMembership] = useState<MyMembership>('NONE')
 
-  const [room, setRoom] = useState<ChatRoom | null>(null)
-  const isOwner = useMemo(
-    () => computeIsOwner({ room, members, myId }),
-    [room, members, myId]
-  )
-
-  const [messages, setMessages] = useState<ChatMsg[]>([])
-  const [input, setInput] = useState('')
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const clientRef = useRef<Client | null>(null)
-
-  const [myStatus, setMyStatus] = useState<MemberInfo['status'] | 'NONE'>('NONE')
-  const [statusErr, setStatusErr] = useState<string | null>(null)
-  const canChat = useMemo(() => myStatus === 'APPROVED', [myStatus])
+  const wsRef = useRef<WebSocket | null>(null)
+  const myIdNum = Number(me?.userId ?? NaN)
 
   useEffect(() => {
     let on = true
     ;(async () => {
       try {
-        const r = await getRoom(rid)
-        if (on) setRoom(r)
-      } catch {}
-    })()
-    return () => { on = false }
-  }, [rid])
+        setErr(null)
+        setLoading(true)
 
-  const reloadMembers = async () => {
-    setLoadingMembers(true)
-    try {
-      const ms = await listMembers(rid)
-      setMembers(ms)
-      const me = ms.find(m => m.userId === myId)
-      setMyStatus(me?.status ?? 'NONE')
-    } finally {
-      setLoadingMembers(false)
-    }
-  }
+        const meta: ChatRoomMeta = await getRoom(rid)
+        setMeta(rid, meta)
 
-  useEffect(() => {
-    let on = true
-    ;(async () => {
-      try {
-        setStatusErr(null)
         const ms = await listMembers(rid)
         if (!on) return
         setMembers(ms)
-        const me = ms.find(m => m.userId === myId)
-        setMyStatus(me?.status ?? 'NONE')
-      } catch (e: any) {
-        if (on) {
-          setMyStatus('NONE')
-          setStatusErr(e?.response?.data?.message || e?.message || '참여 상태를 불러오지 못했습니다.')
+
+        const mine = ms.find(m => Number(m.userId) === myIdNum)
+        setMembership((mine?.status as MyMembership) || 'NONE')
+
+        const isOwnerNow =
+          Number(meta?.createdByUserId) === myIdNum ||
+          ms.some(m => Number(m.userId) === myIdNum && m.role === 'OWNER')
+
+        const canView = isOwnerNow || mine?.status === 'APPROVED'
+        if (canView) {
+          const msgs = await fetchChatMessages(rid, roomState?.lastId || 0, 50)
+          if (!on) return
+          addMessages(rid, msgs)
         }
+      } catch (e: any) {
+        if (!on) return
+        setErr(e?.response?.data?.message || e?.message || '불러오기에 실패했습니다.')
+      } finally {
+        if (on) setLoading(false)
       }
     })()
     return () => { on = false }
-  }, [rid, myId])
+  }, [rid, myIdNum])
 
   useEffect(() => {
-    if (!canChat) return
-    let on = true
-    ;(async () => {
-      try {
-        const { data } = await api.get<{ items: ChatMsg[] }>(`/api/chatrooms/${rid}/messages?limit=50`)
-        const arr = [...data.items].sort((a, b) => a.messageId - b.messageId)
-        if (on) setMessages(arr)
-        setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: 'auto' }), 0)
-      } catch {}
-    })()
-    return () => { on = false }
-  }, [rid, canChat])
+    const meta = roomState?.meta as any
+    const isOwner =
+      Number(meta?.createdByUserId) === Number(me?.userId) ||
+      (members?.some(m => Number(m.userId) === Number(me?.userId) && m.role === 'OWNER') ?? false)
 
-  useEffect(() => {
-    if (!canChat) return
-    const sock = new SockJS('/ws-chat')
-    const c = new Client({
-      webSocketFactory: () => sock as any,
-      reconnectDelay: 2000,
-      onConnect: () => {
-        c.subscribe(`/topic/chatrooms/${rid}`, (msg) => {
-          const payload: ChatMsg = JSON.parse(msg.body)
-          setMessages(prev => [...prev, payload])
-          setTimeout(() => {
-            listRef.current?.scrollTo({ top: 999999, behavior: 'smooth' })
-          }, 0)
-        })
-      },
-    })
-    c.activate()
-    clientRef.current = c
-    return () => { c.deactivate() }
-  }, [rid, canChat])
+    const canRealtime = isOwner || membership === 'APPROVED'
+    if (!canRealtime || !roomState) return
 
-  const askJoin = async () => {
-    if (!myId) {
-      setStatusErr('로그인이 필요합니다.')
-      return
+    const url = import.meta.env.VITE_WS_BASE_URL
+    if (!url) return
+    const ws = new WebSocket(`${url}/ws`)
+    wsRef.current = ws
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'SUBSCRIBE', roomId: rid, after: roomState.lastId }))
     }
+    ws.onmessage = ev => {
+      const p = JSON.parse(ev.data)
+      if (p.type === 'MESSAGE') addMessages(rid, [p.data])
+      if (p.type === 'SYSTEM' && p.data?.status) {
+        const prev = rooms[rid]?.meta
+        if (prev) setMeta(rid, { ...prev, status: p.data.status })
+      }
+    }
+    return () => { ws.close() }
+  }, [roomState?.lastId, membership, members?.length])
+
+  const onClickJoin = async () => {
     try {
-      const r = await requestJoin(rid)
-      setMyStatus(r.status as any)
-      setStatusErr(null)
-      reloadMembers()
+      await requestJoin(rid)
+      setMembership('PENDING')
     } catch (e: any) {
-      setStatusErr(e?.response?.data?.message || e?.message || '참여 요청에 실패했습니다.')
+      setErr(e?.response?.data?.message || e?.message || '참여 요청에 실패했습니다.')
     }
   }
 
-  const send = async () => {
-    if (!input.trim()) return
-    if (!canChat) {
-      alert(myStatus === 'PENDING'
-        ? '승인 대기 중입니다.'
-        : '채팅 권한이 없습니다. 먼저 참여 요청을 보내세요.')
-      return
-    }
-    try {
-      await api.post(`/api/chatrooms/${rid}/messages`, { content: input.trim() })
-      setInput('')
-    } catch {}
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!text.trim()) return
+    const meta = rooms[rid]?.meta as any
+    const isOwner =
+      Number(meta?.createdByUserId) === Number(me?.userId) ||
+      (members?.some(m => Number(m.userId) === Number(me?.userId) && m.role === 'OWNER') ?? false)
+    const closed = meta?.status === 'CLOSED'
+    if (closed) return
+    if (!(isOwner || membership === 'APPROVED')) return
+    const m = await sendChatMessage(rid, text.trim())
+    addMessages(rid, [m])
+    setText('')
   }
 
-  const pending = useMemo(() => members.filter(m => m.status === 'PENDING'), [members])
-  const [openManage, setOpenManage] = useState(false)
+  const onComplete = async () => {
+    const meta = rooms[rid]?.meta as any
+    const isOwner =
+      Number(meta?.createdByUserId) === Number(me?.userId) ||
+      (members?.some(m => Number(m.userId) === Number(me?.userId) && m.role === 'OWNER') ?? false)
+    if (!isOwner) return
+    await completeChat(rid)
+    const newMeta = await getRoom(rid)
+    setMeta(rid, newMeta)
+  }
 
-  const onApprove = async (uid: number) => {
-    await approveMember(rid, uid)
-    await reloadMembers()
-  }
-  const onReject = async (uid: number) => {
-    await rejectMember(rid, uid)
-    await reloadMembers()
-  }
+  if (loading) return <div className="p-6">불러오는 중…</div>
+  if (err) return <div className="p-6 text-rose-600">{err}</div>
+
+  const meta = rooms[rid]?.meta as any
+  const isTrade = !!meta?.transactionId
+  const closed = meta?.status === 'CLOSED'
+  const isOwner =
+    Number(meta?.createdByUserId) === Number(me?.userId) ||
+    (members?.some(m => Number(m.userId) === Number(me?.userId) && m.role === 'OWNER') ?? false)
+  const canView = isOwner || membership === 'APPROVED'
+  const canSend = !closed && canView
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold">
-          채팅방 #{rid} {room?.title ? <span className="text-gray-500 text-base">/ {room.title}</span> : null}
-        </h1>
-        {isOwner && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setOpenManage(v => !v)}
-              className="rounded px-3 py-1.5 border text-sm hover:bg-gray-50"
-            >
-              대기자 관리 {pending.length > 0 && (
-                <span className="ml-1 rounded-full px-2 py-0.5 text-xs bg-amber-600 text-white">
-                  {pending.length}
-                </span>
-              )}
-            </button>
-            <Link
-              to={`/chatrooms/${rid}/manage`}
-              className="rounded px-3 py-1.5 bg-indigo-600 text-white text-sm"
-            >
-              전체 관리
-            </Link>
-          </div>
+    <div className="mx-auto max-w-3xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-2xl font-bold">
+          채팅방 #{rid}
+          {isTrade && <span className="ml-2 text-xs rounded bg-amber-100 px-2 py-1">거래</span>}
+          {closed && <span className="ml-2 text-xs rounded bg-gray-200 px-2 py-1">종료</span>}
+        </div>
+        {isTrade && isOwner && !closed && (
+          <button onClick={onComplete} className="rounded bg-emerald-600 text-black px-3 py-1">
+            거래 완료
+          </button>
         )}
       </div>
 
-      {statusErr && (
-        <div className="mb-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">
-          {statusErr}
-        </div>
-      )}
-      {myStatus === 'NONE' && (
-        <div className="mb-3 rounded border bg-amber-50 px-3 py-2 text-amber-800 flex items-center justify-between">
-          <span>이 채팅방에 참여하려면 요청이 필요합니다.</span>
-          <button
-            onClick={askJoin}
-            className="ml-2 rounded bg-amber-600 px-3 py-1 text-white text-sm"
-          >
-            참여 요청
-          </button>
-        </div>
-      )}
-      {myStatus === 'PENDING' && (
-        <div className="mb-3 rounded border bg-sky-50 px-3 py-2 text-sky-800">
-          승인 대기 중입니다. 방장의 승인을 기다려주세요.
-        </div>
-      )}
-      {myStatus === 'BANNED' && (
-        <div className="mb-3 rounded border bg-rose-50 px-3 py-2 text-rose-800">
-          차단되어 채팅에 참여할 수 없습니다.
-        </div>
-      )}
-
-      {isOwner && openManage && (
-        <div className="mb-4 rounded-xl border bg-white p-4 shadow">
-          <div className="mb-2 font-semibold">대기자 목록</div>
-          {loadingMembers ? (
-            <div className="text-sm text-gray-500">로딩 중…</div>
-          ) : pending.length === 0 ? (
-            <div className="text-sm text-gray-500">대기 중인 사용자가 없습니다.</div>
-          ) : (
-            <ul className="space-y-2">
-              {pending.map(p => (
-                <li key={p.userId} className="flex items-center justify-between">
-                  <div className="text-sm">
-                    {p.nickname || `User#${p.userId}`}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onApprove(p.userId)}
-                      className="rounded bg-emerald-600 text-white text-xs px-3 py-1"
-                    >
-                      수락
-                    </button>
-                    <button
-                      onClick={() => onReject(p.userId)}
-                      className="rounded bg-rose-600 text-white text-xs px-3 py-1"
-                    >
-                      거절
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      <div ref={listRef} className="h-[60vh] overflow-y-auto rounded border bg-white p-3 space-y-2">
-        {canChat ? (
-          messages.map((m) => (
-            <div key={m.messageId} className="text-sm">
-              <span className="font-semibold">
-                {m.senderNickname?.trim()?.length ? m.senderNickname : `User#${m.senderUserId}`}
-              </span>
-              : {m.content}
-              <span className="ml-2 text-gray-400">
-                {new Date(m.sendAt).toLocaleTimeString()}
-              </span>
+      <div className="rounded border bg-white p-3 h-96 overflow-auto">
+        {canView ? (
+          roomState?.messages.map(m => (
+            <div key={m.id} className="mb-2">
+              <div className="text-xs text-gray-500">{m.system ? '시스템' : `User#${m.userId}`}</div>
+              <div>{m.content}</div>
             </div>
           ))
         ) : (
-          <div className="h-full grid place-items-center text-gray-400 text-sm">
+          <div className="h-full flex items-center justify-center text-gray-400">
             권한이 부여되면 채팅 내용이 표시됩니다.
+          </div>
+        )}
+        {closed && (
+          <div className="mt-2 text-center text-sm text-gray-500">
+            거래된 티켓입니다. 채팅이 종료되었습니다.
           </div>
         )}
       </div>
 
-      <div className="mt-3 flex gap-2">
+      {isOwner && !closed && (
+        <div className="text-right mt-2">
+          <Link
+            to={`/chatrooms/${rid}/manage`}
+            className="inline-block rounded bg-yellow-200 px-3 py-1 text-black font-semibold hover:bg-yellow-300"
+          >
+            참여 요청 관리 →
+          </Link>
+        </div>
+      )}
+
+      {!isOwner && !closed && (
+        membership === 'NONE' ? (
+          <div className="flex justify-end">
+            <button
+              onClick={onClickJoin}
+              className="mt-2 rounded bg-indigo-600 px-3 py-1 text-black text-sm hover:bg-indigo-500"
+            >
+              참여 요청
+            </button>
+          </div>
+        ) : membership === 'PENDING' ? (
+          <div className="text-right text-sm text-gray-700">참여 요청 대기 중</div>
+        ) : null
+      )}
+
+      <form onSubmit={submit} className="flex gap-2">
         <input
           className="flex-1 rounded border px-3 py-2"
-          value={input}
-          onChange={(e)=>setInput(e.target.value)}
+          disabled={!canSend}
+          value={text}
+          onChange={e => setText(e.target.value)}
           placeholder={
-            canChat ? '메시지 입력'
-            : myStatus === 'PENDING' ? '승인 대기 중…'
-            : '참여 요청 필요'
+            closed
+              ? '종료된 채팅입니다.'
+              : !canView
+              ? membership === 'PENDING'
+                ? '승인 대기 중'
+                : '참여 요청 필요'
+              : '메시지를 입력하세요'
           }
-          disabled={!canChat}
-          onKeyDown={(e)=> e.key === 'Enter' && send()}
         />
         <button
-          className="rounded bg-indigo-600 px-4 py-2 text-white disabled:opacity-50"
-          onClick={send}
-          disabled={!canChat}
+          disabled={!canSend || !text.trim()}
+          className="rounded bg-indigo-600 text-black px-4 hover:bg-indigo-500 disabled:opacity-50"
         >
           보내기
         </button>
-      </div>
+      </form>
     </div>
   )
 }

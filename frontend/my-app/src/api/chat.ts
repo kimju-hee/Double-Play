@@ -17,16 +17,20 @@ export type MemberInfo = {
 }
 
 export function computeIsOwner(opts: {
-  room?: Pick<ChatRoom, 'createdByUserId'> | null
-  members?: MemberInfo[]
-  myId: number | null | undefined
-}): boolean {
-  const { room, members = [], myId } = opts
-  if (!myId) return false
-  if (room && room.createdByUserId === myId) return true
-  const owner = members.find(m => m.userId === myId && m.role === 'OWNER')
-  return !!owner
-}
+    room?: { createdByUserId?: number | string } | null
+    members?: Array<{ userId: number | string; role?: 'OWNER' | 'MODERATOR' | 'MEMBER' }>
+    myId: number | string | null | undefined
+  }): boolean {
+    const my = Number(opts.myId ?? NaN)
+    if (!Number.isFinite(my)) return false
+  
+    const ownerFromRoom = Number(opts.room?.createdByUserId ?? NaN)
+    if (Number.isFinite(ownerFromRoom) && ownerFromRoom === my) return true
+  
+    const list = opts.members ?? []
+    return list.some(m => Number(m.userId) === my && m.role === 'OWNER')
+  }
+  
 
 export async function fetchChatRooms(): Promise<ChatRoom[]> {
   const { data } = await api.get<{ items: ChatRoom[] }>('/api/chatrooms')
@@ -49,7 +53,6 @@ export async function getRoom(roomId: number): Promise<ChatRoom> {
   return data
 }
 
-/** ========= Members ========= */
 export async function listMembers(roomId: number): Promise<MemberInfo[]> {
   const { data } = await api.get<{ items: MemberInfo[] }>(`/api/chatrooms/${roomId}/members`)
   return data.items
@@ -83,4 +86,44 @@ export async function banMember(roomId: number, userId: number) {
 export async function unbanMember(roomId: number, userId: number) {
   const { data } = await api.put<{ status: MemberInfo['status'] }>(`/api/chatrooms/${roomId}/members/${userId}/approve`)
   return data
+}
+export type ChatMessage = { id: number; roomId: number; userId: number; content: string; createdAt: string; system?: boolean }
+
+export async function fetchChatMessages(roomId: number, after: number = 0, limit: number = 50): Promise<ChatMessage[]> {
+  const { data } = await api.get<{ items: ChatMessage[] }>(`/api/chatrooms/${roomId}/messages`, { params: { after, limit } })
+  return data.items
+}
+
+export async function sendChatMessage(roomId: number, content: string): Promise<ChatMessage> {
+  const { data } = await api.post<ChatMessage>(`/api/chatrooms/${roomId}/messages`, { content })
+  return data
+}
+
+export async function completeChat(roomId: number): Promise<ChatRoom> {
+  const { data } = await api.post<ChatRoom>(`/api/chatrooms/${roomId}/complete`)
+  return data
+}
+
+export async function aggregateMyTradeChats(myId: number) {
+  const rooms = await listChatRooms()
+  const tradeRooms = rooms.filter(r => r.transactionId != null)
+  const enriched = await Promise.all(
+    tradeRooms.map(async r => {
+      let status: 'OPEN' | 'CLOSED' | undefined = undefined
+      try {
+        const full = await getRoom(r.roomId)
+        status = (full as any).status || undefined
+      } catch {}
+      let joined = false
+      try {
+        const members = await listMembers(r.roomId)
+        joined = members.some(m => Number(m.userId) === Number(myId) && m.status === 'APPROVED')
+      } catch {}
+      return { ...r, status, joined }
+    })
+  )
+  const hosting = enriched.filter(r => Number(r.createdByUserId) === Number(myId))
+  const joined = enriched.filter(r => Number(r.createdByUserId) !== Number(myId) && r.joined)
+  const others = enriched.filter(r => Number(r.createdByUserId) !== Number(myId) && !r.joined)
+  return { hosting, joined, others }
 }

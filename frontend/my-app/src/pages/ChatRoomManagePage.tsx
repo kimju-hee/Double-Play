@@ -62,23 +62,43 @@ export default function ChatRoomManagePage() {
               <div className="flex gap-2">
                 {m.status === 'PENDING' && (
                   <>
-                    <button className="px-2 py-1 text-white bg-emerald-600 rounded"
-                            onClick={() => act(() => approveMember(rid, m.userId))}>승인</button>
-                    <button className="px-2 py-1 text-rose-600 border rounded"
-                            onClick={() => act(() => rejectMember(rid, m.userId))}>거절</button>
+                    <button
+                      className="px-2 py-1 text-black bg-emerald-600 rounded"
+                      onClick={() => act(() => approveMember(rid, m.userId))}
+                    >
+                      승인
+                    </button>
+                    <button
+                      className="px-2 py-1 text-rose-600 border rounded"
+                      onClick={() => act(() => rejectMember(rid, m.userId))}
+                    >
+                      거절
+                    </button>
                   </>
                 )}
                 {m.status === 'APPROVED' && (
                   <>
-                    <button className="px-2 py-1 text-rose-600 border rounded"
-                            onClick={() => act(() => kickMember(rid, m.userId))}>강퇴</button>
-                    <button className="px-2 py-1 text-white bg-rose-600 rounded"
-                            onClick={() => act(() => banMember(rid, m.userId))}>차단</button>
+                    <button
+                      className="px-2 py-1 text-rose-600 border rounded"
+                      onClick={() => act(() => kickMember(rid, m.userId))}
+                    >
+                      강퇴
+                    </button>
+                    <button
+                      className="px-2 py-1 text-black bg-rose-600 rounded"
+                      onClick={() => act(() => banMember(rid, m.userId))}
+                    >
+                      차단
+                    </button>
                   </>
                 )}
                 {m.status === 'BANNED' && (
-                  <button className="px-2 py-1 text-white bg-indigo-600 rounded"
-                          onClick={() => act(() => unbanMember(rid, m.userId))}>차단 해제</button>
+                  <button
+                    className="px-2 py-1 text-black bg-indigo-600 rounded"
+                    onClick={() => act(() => unbanMember(rid, m.userId))}
+                  >
+                    차단 해제
+                  </button>
                 )}
               </div>
             </li>
