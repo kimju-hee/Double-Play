@@ -7,5 +7,6 @@ public record ChatRoomResponse(
         String title,
         Long creatorUserId,
         String creatorNickname,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String membership
 ) {}

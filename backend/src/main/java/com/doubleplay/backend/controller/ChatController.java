@@ -55,22 +55,27 @@ public class ChatController {
         return null;
     }
 
-    @PostMapping("/chatrooms")
-    public ChatRoomResponse createRoom(@RequestBody ChatRoomCreateRequest req) {
-        Long uid = currentUserId();
-        if (uid == null) throw new org.springframework.security.access.AccessDeniedException("UNAUTHORIZED");
-        return chatService.createRoom(req, uid);
-    }
-
     @GetMapping("/chatrooms")
     public Map<String, List<ChatRoomResponse>> listAll() {
-        return Map.of("items", chatService.listAllRooms());
+        Long uid = currentUserId();
+        if (uid == null) throw new org.springframework.security.access.AccessDeniedException("UNAUTHORIZED");
+        return Map.of("items", chatService.listAllRooms(uid));
     }
 
     @GetMapping("/chatrooms/{roomId}")
-    public ChatRoomResponse get(@PathVariable Long roomId){
-        return chatService.getRoom(roomId);
+    public ChatRoomResponse get(@PathVariable Long roomId) {
+        Long uid = currentUserId();
+        if (uid == null) throw new org.springframework.security.access.AccessDeniedException("UNAUTHORIZED");
+        return chatService.getRoom(roomId, uid);
     }
+
+    @PostMapping("/chatrooms")
+    public ChatRoomResponse createRoom(@RequestBody ChatRoomCreateRequest req) {
+        Long uid = currentUserId();
+        if (uid == null) throw new IllegalArgumentException("인증 필요");
+        return chatService.createRoom(req, uid);
+    }
+
 
     @PostMapping("/chatrooms/{roomId}/join")
     public ParticipantStatusResponse requestJoin(@PathVariable Long roomId){

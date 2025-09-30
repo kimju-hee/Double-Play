@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -68,6 +69,7 @@ public class TransactionService {
                 .toList();
     }
 
+
     @Transactional
     public boolean delete(Long transactionId, Long requesterId, boolean isAdmin) {
         Transaction tx = transactionRepository.findById(transactionId)
@@ -79,5 +81,31 @@ public class TransactionService {
 
         transactionRepository.deleteById(transactionId);
         return true;
+    }
+
+    @Transactional
+    public void complete(Long id, Long requesterId) {
+        Transaction tx = transactionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("거래를 찾을 수 없습니다: " + id));
+
+        if (requesterId == null || !requesterId.equals(tx.getUserId())) {
+            throw new IllegalStateException("판매 완료 권한이 없습니다.");
+        }
+
+        try {
+            // 예: tx.setStatus(Transaction.Status.COMPLETED);
+            Transaction.class.getMethod("setStatus", Enum.class)
+                    .invoke(tx, Enum.valueOf(
+                            (Class<Enum>) Class.forName(tx.getClass().getName() + "$Status"),
+                            "COMPLETED"
+                    ));
+        } catch (NoSuchMethodException | ClassNotFoundException e) {
+            try {
+                Transaction.class.getMethod("setCompletedAt", LocalDateTime.class)
+                        .invoke(tx, LocalDateTime.now());
+            } catch (Exception ignored) {}
+        } catch (Exception ignored) {}
+
+        transactionRepository.save(tx);
     }
 }

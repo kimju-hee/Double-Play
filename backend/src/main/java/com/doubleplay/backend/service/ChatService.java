@@ -22,21 +22,25 @@ public class ChatService {
     private final UsersRepository usersRepository;
 
     private String nicknameOf(Long userId) {
-        return usersRepository.findById(userId).map(u -> u.getNickname()).orElse("User#" + userId);
+        return usersRepository.findById(userId)
+                .map(u -> u.getNickname())
+                .orElse("User#" + userId);
     }
 
-    public ChatRoomResponse createRoom(ChatRoomCreateRequest req, Long uid) {
+    public ChatRoomResponse createRoom(ChatRoomCreateRequest req, Long creatorUserId) {
         var room = ChatRoom.builder()
                 .title(req.title())
                 .transactionId(req.transactionId())
-                .createdByUserId(uid)
+                .createdByUserId(creatorUserId)
                 .createdAt(LocalDateTime.now())
                 .build();
         chatRoomRepository.save(room);
 
         var owner = ChatRoomMember.builder()
-                .room(room).userId(uid)
-                .role(Role.OWNER).status(Status.APPROVED)
+                .room(room)
+                .userId(creatorUserId)
+                .role(Role.OWNER)
+                .status(Status.APPROVED)
                 .build();
         memberRepository.save(owner);
 
@@ -45,36 +49,66 @@ public class ChatService {
                 room.getTitle(),
                 room.getCreatedByUserId(),
                 nicknameOf(room.getCreatedByUserId()),
-                room.getCreatedAt()
+                room.getCreatedAt(),
+                "APPROVED"
         );
     }
 
-    public List<ChatRoomResponse> listAllRooms() {
+    public List<ChatRoomResponse> listAllRooms(Long userId) {
         return chatRoomRepository.findAll().stream()
-                .map(r -> new ChatRoomResponse(r.getRoomId(), r.getTitle(),
-                        r.getCreatedByUserId(), nicknameOf(r.getCreatedByUserId()), r.getCreatedAt()))
+                .filter(r -> r.getTransactionId() == null)
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .map(r -> {
+                    var membership = memberRepository.findByRoom_RoomIdAndUserId(r.getRoomId(), userId)
+                            .map(m -> m.getStatus().name())
+                            .orElse("NONE");
+                    return new ChatRoomResponse(
+                            r.getRoomId(),
+                            r.getTitle(),
+                            r.getCreatedByUserId(),
+                            nicknameOf(r.getCreatedByUserId()),
+                            r.getCreatedAt(),
+                            membership
+                    );
+                })
                 .toList();
     }
 
-    public ChatRoomResponse getRoom(Long roomId) {
+    public ChatRoomResponse getRoom(Long roomId, Long userId) {
         var r = chatRoomRepository.findById(roomId).orElseThrow();
-        return new ChatRoomResponse(r.getRoomId(), r.getTitle(),
-                r.getCreatedByUserId(), nicknameOf(r.getCreatedByUserId()), r.getCreatedAt());
+        var membership = memberRepository.findByRoom_RoomIdAndUserId(roomId, userId)
+                .map(m -> m.getStatus().name())
+                .orElse("NONE");
+        return new ChatRoomResponse(
+                r.getRoomId(),
+                r.getTitle(),
+                r.getCreatedByUserId(),
+                nicknameOf(r.getCreatedByUserId()),
+                r.getCreatedAt(),
+                membership
+        );
     }
 
     public ParticipantStatusResponse requestJoin(Long roomId, Long userId) {
         var room = chatRoomRepository.findById(roomId).orElseThrow();
         var existing = memberRepository.findByRoom_RoomIdAndUserId(roomId, userId).orElse(null);
+        System.out.println("requestJoin: roomId=" + roomId + ", userId=" + userId);
+
         if (existing != null) {
             if (existing.getStatus() == Status.BANNED) throw new IllegalStateException("BANNED");
             if (existing.getStatus() == Status.APPROVED) return new ParticipantStatusResponse("APPROVED");
             return new ParticipantStatusResponse("PENDING");
         }
+
         var m = ChatRoomMember.builder()
-                .room(room).userId(userId)
-                .role(Role.MEMBER).status(Status.PENDING).build();
+                .room(room)
+                .userId(userId)
+                .role(Role.MEMBER)
+                .status(Status.PENDING)
+                .build();
+
         memberRepository.save(m);
-        return new ParticipantStatusResponse("PENDING");
+        return new ParticipantStatusResponse(m.getStatus().name());
     }
 
     public ParticipantStatusResponse approve(Long roomId, Long targetUserId, Long approverId, boolean approve) {
@@ -88,7 +122,8 @@ public class ChatService {
 
     public void kick(Long roomId, Long targetUserId, Long byUserId) {
         mustBeModerator(roomId, byUserId);
-        memberRepository.findByRoom_RoomIdAndUserId(roomId, targetUserId).ifPresent(memberRepository::delete);
+        memberRepository.findByRoom_RoomIdAndUserId(roomId, targetUserId)
+                .ifPresent(memberRepository::delete);
     }
 
     public void ban(Long roomId, Long targetUserId, Long byUserId) {
@@ -96,13 +131,16 @@ public class ChatService {
         var m = memberRepository.findByRoom_RoomIdAndUserId(roomId, targetUserId)
                 .orElseGet(() -> ChatRoomMember.builder()
                         .room(chatRoomRepository.findById(roomId).orElseThrow())
-                        .userId(targetUserId).role(Role.MEMBER).build());
+                        .userId(targetUserId)
+                        .role(Role.MEMBER)
+                        .build());
         m.setStatus(Status.BANNED);
         memberRepository.save(m);
     }
 
     public ChatMessageResponse sendMessage(Long roomId, Long senderUserId, ChatMessageCreateRequest req) {
         ensureApproved(roomId, senderUserId);
+
         var room = chatRoomRepository.findById(roomId).orElseThrow();
         var msg = ChatMessage.builder()
                 .chatRoom(room)
@@ -111,9 +149,14 @@ public class ChatService {
                 .sendAt(LocalDateTime.now())
                 .build();
         chatMessageRepository.save(msg);
+
         return new ChatMessageResponse(
-                msg.getMessageId(), roomId, msg.getSenderUserId(),
-                nicknameOf(msg.getSenderUserId()), msg.getContent(), msg.getSendAt()
+                msg.getMessageId(),
+                roomId,
+                msg.getSenderUserId(),
+                nicknameOf(msg.getSenderUserId()),
+                msg.getContent(),
+                msg.getSendAt()
         );
     }
 
@@ -121,25 +164,21 @@ public class ChatService {
         var msgs = (before != null)
                 ? chatMessageRepository.findByChatRoom_RoomIdAndMessageIdLessThanOrderByMessageIdDesc(roomId, before)
                 : chatMessageRepository.findTop20ByChatRoom_RoomIdOrderByMessageIdDesc(roomId);
-        return msgs.stream().limit(limit)
-                .map(m -> new ChatMessageResponse(m.getMessageId(), roomId,
-                        m.getSenderUserId(), nicknameOf(m.getSenderUserId()),
-                        m.getContent(), m.getSendAt()))
+
+        return msgs.stream()
+                .limit(limit)
+                .map(m -> new ChatMessageResponse(
+                        m.getMessageId(),
+                        roomId,
+                        m.getSenderUserId(),
+                        nicknameOf(m.getSenderUserId()),
+                        m.getContent(),
+                        m.getSendAt()))
                 .toList();
     }
 
-    private void mustBeModerator(Long roomId, Long userId) {
-        var m = memberRepository.findByRoom_RoomIdAndUserId(roomId, userId).orElseThrow(() -> new IllegalStateException("NOT_MEMBER"));
-        if (!(m.getRole() == Role.OWNER || m.getRole() == Role.MODERATOR)) throw new IllegalStateException("FORBIDDEN");
-    }
-
-    private void ensureApproved(Long roomId, Long userId) {
-        var m = memberRepository.findByRoom_RoomIdAndUserId(roomId, userId).orElseThrow(() -> new IllegalStateException("NOT_MEMBER"));
-        if (m.getStatus() != Status.APPROVED) throw new IllegalStateException("PENDING_OR_BANNED");
-    }
-
     public List<MemberInfo> listPending(Long roomId) {
-        return memberRepository.findByRoom_RoomIdAndStatus(roomId, ChatRoomMember.Status.PENDING)
+        return memberRepository.findByRoom_RoomIdAndStatus(roomId, Status.PENDING)
                 .stream()
                 .map(m -> new MemberInfo(
                         m.getUserId(),
@@ -160,4 +199,17 @@ public class ChatService {
                 .toList();
     }
 
+
+    private void mustBeModerator(Long roomId, Long userId) {
+        var m = memberRepository.findByRoom_RoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new IllegalStateException("NOT_MEMBER"));
+        if (!(m.getRole() == Role.OWNER || m.getRole() == Role.MODERATOR))
+            throw new IllegalStateException("FORBIDDEN");
+    }
+
+    private void ensureApproved(Long roomId, Long userId) {
+        var m = memberRepository.findByRoom_RoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new IllegalStateException("NOT_MEMBER"));
+        if (m.getStatus() != Status.APPROVED) throw new IllegalStateException("PENDING_OR_BANNED");
+    }
 }
