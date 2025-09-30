@@ -1,13 +1,12 @@
-// src/components/TransactionForm.tsx
 import { useEffect, useState } from 'react'
 import { createTransaction } from '../api/transactions'
-import { listVenues, type Venue } from '../api/venues' // 있으면 사용
+import { listVenues, type Venue } from '../api/venues'
 
 type Props = {
   meetupId: number
   userId: number
   onCreated?: (transactionId: number) => void
-  venuesProp?: Venue[] // 외부에서 넘겨줄 수도 있게 선택값
+  venuesProp?: Venue[]
 }
 
 export default function TransactionForm({ meetupId, userId, onCreated, venuesProp }: Props) {
@@ -18,16 +17,14 @@ export default function TransactionForm({ meetupId, userId, onCreated, venuesPro
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  // venues를 prop으로 안 주면 직접 불러오기
   useEffect(() => {
     if (venuesProp && venuesProp.length) return
     let on = true
     ;(async () => {
       try {
-        const rows = await listVenues() // GET /api/venues -> {items: Venue[]}
+        const rows = await listVenues()
         if (on) setVenues(rows)
       } catch (e: any) {
-        // 구장 목록 실패는 필수는 아니므로 에러만 표시
         setErr(e?.message || '구장 목록을 불러오지 못했습니다.')
       }
     })()
@@ -74,7 +71,6 @@ export default function TransactionForm({ meetupId, userId, onCreated, venuesPro
 
   return (
     <form onSubmit={submit} className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
-      {/* 제목 */}
       <input
         type="text"
         className="h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -83,7 +79,6 @@ export default function TransactionForm({ meetupId, userId, onCreated, venuesPro
         onChange={(e) => setTitle(e.target.value)}
       />
 
-      {/* 가격 */}
       <input
         type="number"
         min={0}
@@ -94,7 +89,6 @@ export default function TransactionForm({ meetupId, userId, onCreated, venuesPro
         onChange={(e) => setPrice(e.target.value === '' ? '' : Number(e.target.value))}
       />
 
-      {/* 구장 선택 */}
       <select
         className="h-10 md:w-48 px-3 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         value={venueId}

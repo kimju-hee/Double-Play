@@ -27,12 +27,11 @@ export default function MainPage() {
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase()
     if (!t) return rooms
-    return rooms.filter(r => r.name.toLowerCase().includes(t))
+    return rooms.filter(r => (r.title ?? '').toLowerCase().includes(t))
   }, [rooms, q])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* 헤더 */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
         <div className="mx-auto max-w-6xl px-4 py-4 flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -47,7 +46,7 @@ export default function MainPage() {
               className="h-10 w-64 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <Link
-              to="/rooms/new"
+              to="/chatrooms/new"
               className="h-10 px-4 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-500"
             >
               방 만들기
@@ -56,7 +55,6 @@ export default function MainPage() {
         </div>
       </header>
 
-      {/* 본문 */}
       <main className="mx-auto max-w-6xl px-4 py-8">
         {err && (
           <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -76,18 +74,19 @@ export default function MainPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((r) => (
               <Link
-                key={r.id}
-                to={`/rooms/${r.id}`}
+                key={r.roomId}
+                to={`/chatrooms/${r.roomId}`}
                 className="group rounded-2xl bg-white p-5 shadow hover:shadow-lg transition border border-gray-100"
               >
                 <div className="flex items-start justify-between">
-                  <h3 className="text-lg font-semibold">{r.name}</h3>
-                  {!!r.unreadCount && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-rose-600 text-white">{r.unreadCount}</span>
-                  )}
+                  <h3 className="text-lg font-semibold">{r.title || `채팅방 #${r.roomId}`}</h3>
                 </div>
-                <div className="mt-2 text-sm text-gray-600 line-clamp-2">{r.lastMessage ?? '최근 메시지가 없습니다.'}</div>
-                <div className="mt-4 text-xs text-gray-500">{r.memberCount}명 참여중</div>
+                <div className="mt-2 text-sm text-gray-600">
+                  개설자: {r.creatorNickname || (r.createdByUserId ? `User#${r.createdByUserId}` : '알 수 없음')}
+                </div>
+                <div className="text-sm text-gray-600">
+                  생성일: {new Date(r.createdAt).toLocaleString()}
+                </div>
               </Link>
             ))}
           </div>

@@ -6,6 +6,7 @@ import {
   type TransactionResponse,
 } from '../api/transactions'
 import { getVenue } from '../api/venues'
+import { connectRoomByTransaction } from '../api/chat'
 
 export default function TransactionDetailPage() {
   const { transactionId } = useParams<{ transactionId: string }>()
@@ -43,6 +44,16 @@ export default function TransactionDetailPage() {
       nav(-1)
     } catch (e: any) {
       alert(e?.response?.data?.message || e?.message || '삭제에 실패했습니다.')
+    }
+  }
+
+  const connectChat = async () => {
+    if (!item) return
+    try {
+      const room = await connectRoomByTransaction(item.transactionId)
+      nav(`/chatrooms/${room.roomId}`)
+    } catch (e: any) {
+      alert(e?.response?.data?.message || e?.message || '채팅방 연결 실패')
     }
   }
 
@@ -86,7 +97,13 @@ export default function TransactionDetailPage() {
           <div className="text-sm text-gray-600 mt-2">거래 일시</div>
           <div>{new Date(item.tradedAt).toLocaleString()}</div>
 
-          <div className="pt-4 flex justify-end">
+          <div className="pt-4 flex justify-between">
+            <button
+              onClick={connectChat}
+              className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+            >
+              구매(채팅 시작)
+            </button>
             <button onClick={remove} className="text-rose-600 hover:underline">
               삭제
             </button>
